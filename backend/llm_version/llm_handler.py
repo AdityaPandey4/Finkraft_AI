@@ -95,21 +95,35 @@ def generate_insights(query: str, result_df: pd.DataFrame) -> dict:
         logger.error(f"Error generating insight: {e}", exc_info=True)
         return None
 
-def process_query_with_llm(query: str, df: pd.DataFrame) -> dict:
+def process_query_with_llm(query: str, df: pd.DataFrame, history: list = []) -> dict:
     """
     Processes the user query by generating and executing pandas code using an LLM.
     """
-    logger.info(f"Processing query: '{query}'")
+    logger.info(f"Processing query: '{query}' with history of length {len(history)}")
     df_head = df.head().to_string()
-    
+    column_names = df.columns.tolist()
+
+    # Construct conversation history for the prompt
+    conversation_history = []
+    for event in history:
+        conversation_history.append(f"User: {event['query']}")
+        # Add assistant's response if it exists and has an explanation
+        if 'response' in event and event['response'].get('explanation'):
+            conversation_history.append(f"Assistant: {event['response']['explanation']}")
+    conversation_history_str = "\n".join(conversation_history)
+
     prompt = f"""
     You are a Python pandas expert and a helpful data analyst. A user has provided a dataframe named 'df' and a query in natural language.
+    The dataframe has the following columns: {column_names}
     The first 5 rows of the dataframe are:
     {df_head}
 
+    Here is the conversation history so far:
+    {conversation_history_str}
+
     User query: "{query}"
 
-    Your task is to first determine if the query is ambiguous.
+    Your task is to first determine if the query is ambiguous, considering the conversation history.
     
     1.  **If the query is clear and actionable:**
         - Generate pandas code to transform the dataframe. The final result MUST be assigned to a variable named 'result_df'.
@@ -119,7 +133,8 @@ def process_query_with_llm(query: str, df: pd.DataFrame) -> dict:
 
     2.  **If the query is ambiguous** (e.g., "top products" without specifying a metric):
         - DO NOT generate code.
-        - Generate 2-3 specific, alternative query suggestions. For each suggestion, provide the refined query and a short explanation of what it does.
+        - Generate 2-3 specific, alternative query suggestions that are relevant to the current query and context.
+        - For each suggestion, provide the refined query and a short explanation of what it does.
         - Return a single, valid JSON object.
 
     **JSON Output Specification:**

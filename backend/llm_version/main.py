@@ -67,7 +67,8 @@ def process_query(request: QueryRequest):
     logger.info(f"Query endpoint called with data_id: {request.data_id} and query: '{request.query}'")
     try:
         df = get_dataframe(request.data_id)
-        response = llm_handler.process_query_with_llm(request.query, df)
+        history = get_history(request.data_id)
+        response = llm_handler.process_query_with_llm(request.query, df, history)
         logger.info(f"Response from LLM handler: {response}")
 
         response_type = response.get("type")

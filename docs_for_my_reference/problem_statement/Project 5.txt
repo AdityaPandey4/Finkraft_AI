@@ -1,0 +1,5 @@
+Project 5 – Data Explorer 
+- File: Project5.csv
+- Rows: 6199
+- Description: Daily orders across regions/segments/channels/categories with pricing, discounts, taxes, returns. Supports pivoting, grouping, and multi-chart scenarios.
+- Key fields: date, region, segment, channel, product_category, product_name, sku, units_sold, unit_price, discount_pct, gross_revenue, cogs, tax_pct, tax_amount, returned_units, net_revenue.

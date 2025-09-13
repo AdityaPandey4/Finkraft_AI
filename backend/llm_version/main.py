@@ -1,9 +1,20 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .data_tools import load_csv_from_upload, get_dataframe, update_dataframe
+from .data_tools import (
+    load_csv_from_upload, 
+    get_dataframe, 
+    update_dataframe,
+    add_to_history,
+    get_history
+)
 from . import llm_handler
+from .profiler import get_profile, get_profile_as_dict
+from .markdown_generator import create_chat_summary_markdown
 import logging
+import pandas as pd
+import io
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +35,9 @@ class QueryRequest(BaseModel):
     query: str
     data_id: str
 
+class HistoryRequest(BaseModel):
+    data_id: str
+
 @app.get("/")
 def read_root():
     return {"message": "Finkraft Data Explorer Backend is running."}
@@ -36,8 +50,14 @@ def upload_csv(file: UploadFile = File(...)):
     try:
         data_id = load_csv_from_upload(file.file)
         df = get_dataframe(data_id)
-        logger.info(f"File uploaded successfully. Data ID: {data_id}")
-        return {"data_id": data_id, "columns": df.columns.tolist(), "rows": df.head().to_dict(orient='records')}
+        profile = get_profile(df)
+        logger.info(f"File uploaded and profiled successfully. Data ID: {data_id}")
+        return {
+            "data_id": data_id, 
+            "columns": df.columns.tolist(), 
+            "rows": df.head().to_dict(orient='records'),
+            "profile": profile
+        }
     except Exception as e:
         logger.error(f"Error processing file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing file: {e}")
@@ -47,44 +67,26 @@ def process_query(request: QueryRequest):
     logger.info(f"Query endpoint called with data_id: {request.data_id} and query: '{request.query}'")
     try:
         df = get_dataframe(request.data_id)
-        response = llm_handler.process_query_with_llm(request.query, df)
+        history = get_history(request.data_id)
+        response = llm_handler.process_query_with_llm(request.query, df, history)
         logger.info(f"Response from LLM handler: {response}")
 
         response_type = response.get("type")
+        
+        # Log the event to history
+        history_event = {"query": request.query, "response": response}
+        add_to_history(request.data_id, history_event)
 
         if response_type == "code":
             new_df = response["dataframe"]
-            explanation = response["explanation"]
-            chart_spec = response.get("chart")
             logger.info("Updating dataframe in cache.")
             update_dataframe(request.data_id, new_df)
-            logger.info("Returning new dataframe to frontend.")
             
-            # Convert dataframe to list of records for JSON serialization
-            records = new_df.to_dict(orient='records')
-            
-            return_payload = {
-                "type": "code",
-                "dataframe": records, # Send as records
-                "columns": new_df.columns.tolist(), # Send columns separately
-                "explanation": explanation,
-                "chart": chart_spec
-            }
-            logger.info(f"Returning payload: {return_payload}")
-            return return_payload
-            
-        elif response_type == "suggestions":
-            logger.info("Returning suggestions to frontend.")
-            return {
-                "type": "suggestions",
-                "suggestions": response["suggestions"]
-            }
-        else: # Handle error case
-            logger.warning(f"LLM handler returned an error or unknown type: {response.get('explanation')}")
-            return {
-                "type": "error",
-                "explanation": response.get("explanation", "An unknown error occurred.")
-            }
+            # The dataframe in the response should be converted to JSON for the frontend
+            response["dataframe"] = new_df.to_dict(orient='records')
+            response["columns"] = new_df.columns.tolist()
+
+        return response
 
     except ValueError as e:
         logger.error(f"ValueError in process_query: {e}", exc_info=True)
@@ -92,3 +94,41 @@ def process_query(request: QueryRequest):
     except Exception as e:
         logger.error(f"Exception in process_query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing query: {e}")
+
+@app.post("/history")
+def get_chat_history(request: HistoryRequest):
+    logger.info(f"History endpoint called for data_id: {request.data_id}")
+    try:
+        history = get_history(request.data_id)
+        # Convert dataframes in history to JSON serializable format
+        for event in history:
+            if 'response' in event and 'dataframe' in event['response']:
+                df = event['response']['dataframe']
+                if isinstance(df, pd.DataFrame):
+                    event['response']['dataframe'] = df.to_dict(orient='records')
+                    event['response']['columns'] = df.columns.tolist()
+        return history
+    except Exception as e:
+        logger.error(f"Exception in get_history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error retrieving history: {e}")
+
+@app.get("/export/{data_id}/{format}")
+def export_data(data_id: str, format: str):
+    logger.info(f"Export endpoint called for data_id: {data_id} with format: {format}")
+    if format == "md":
+        history = get_history(data_id)
+        df = get_dataframe(data_id)
+        profile = get_profile_as_dict(df)
+        summary = llm_handler.generate_chat_summary(history)
+        md_content = create_chat_summary_markdown(profile, summary, history, data_id)
+        return StreamingResponse(io.StringIO(md_content), media_type="text/markdown", headers={"Content-Disposition": "attachment; filename=chat_summary.md"})
+    
+    elif format == "csv":
+        df = get_dataframe(data_id)
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+        return StreamingResponse(csv_buffer, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=final_data.csv"})
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid export format specified.")

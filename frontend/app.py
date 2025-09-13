@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+import json
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -17,52 +18,101 @@ BACKEND_URL = "http://127.0.0.1:8000"
 def init_session_state():
     if 'data_id' not in st.session_state:
         st.session_state.data_id = None
-    if 'full_df' not in st.session_state:
-        st.session_state.full_df = None
-    if 'display_df' not in st.session_state:
-        st.session_state.display_df = None
-    if 'explanation' not in st.session_state:
-        st.session_state.explanation = ""
-    if 'suggestions' not in st.session_state:
-        st.session_state.suggestions = []
-    if 'chart_spec' not in st.session_state:
-        st.session_state.chart_spec = None
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    if 'profile' not in st.session_state:
+        st.session_state.profile = None
+    if 'markdown_preview' not in st.session_state:
+        st.session_state.markdown_preview = None
 
 init_session_state()
 
 # --- Backend Communication ---
+def get_history(data_id):
+    try:
+        response = requests.post(f"{BACKEND_URL}/history", json={"data_id": data_id})
+        if response.status_code == 200:
+            st.session_state.chat_history = response.json()
+        else:
+            st.error(f"Could not retrieve history: {response.text}")
+    except Exception as e:
+        st.error(f"Error getting history: {e}")
+
 def process_query(query_text):
     payload = {"query": query_text, "data_id": st.session_state.data_id}
     try:
         response = requests.post(f"{BACKEND_URL}/process_query", json=payload)
         if response.status_code == 200:
-            data = response.json()
-            response_type = data.get("type")
-
-            st.session_state.chart_spec = None # Reset chart on new query
-
-            if response_type == "code":
-                st.session_state.display_df = pd.DataFrame(data['dataframe'], columns=data['columns'])
-                st.session_state.explanation = data['explanation']
-                st.session_state.suggestions = []
-                if data.get("chart"):
-                    st.session_state.chart_spec = data["chart"]
-            elif response_type == "suggestions":
-                st.session_state.suggestions = data['suggestions']
-                st.session_state.explanation = ""
-            elif response_type == "error":
-                st.error(data.get("explanation", "An unknown error occurred."))
-                st.session_state.suggestions = []
+            # After processing, just update the history, which will trigger a rerun
+            get_history(st.session_state.data_id)
         else:
             st.error(f"Error from backend: {response.text}")
-            st.session_state.suggestions = []
-
     except requests.exceptions.ConnectionError:
         st.error("Connection Error: Could not connect to the backend.")
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
 # --- UI Rendering ---
+
+def render_chat():
+    for event in st.session_state.chat_history:
+        with st.chat_message("user"):
+            st.markdown(event['query'])
+
+        with st.chat_message("assistant"):
+            response = event['response']
+            response_type = response.get("type")
+
+            if response_type == "code":
+                st.info(response.get("explanation", ""))
+                
+                # Display charts in tabs
+                if response.get("charts"):
+                    st.subheader("Charts")
+                    chart_tabs = st.tabs([spec['type'].capitalize() for spec in response["charts"]])
+                    for i, spec in enumerate(response["charts"]):
+                        with chart_tabs[i]:
+                            chart_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
+                            try:
+                                if spec['type'] == 'bar':
+                                    fig = px.bar(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                elif spec['type'] == 'pie':
+                                    fig = px.pie(chart_df, names=spec['names_column'], values=spec['values_column'], color_discrete_sequence=px.colors.sequential.RdBu)
+                                elif spec['type'] == 'line':
+                                    fig = px.line(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                elif spec['type'] == 'scatter':
+                                    fig = px.scatter(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                st.plotly_chart(fig, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Could not create {spec['type']} chart: {e}")
+                    st.divider()
+
+                # Display dataframe
+                st.subheader("Data View")
+                display_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
+                st.dataframe(display_df)
+
+                # Display insight
+                if response.get("insight"):
+                    st.markdown("--- ")
+                    insight = response["insight"]
+                    st.info(f"💡 **Proactive Insight:** {insight['insight']}")
+                    if st.button(insight['follow_up_query'], key=f"insight_{event['query']}"):
+                        with st.spinner('Discovering more insights...'):
+                            process_query(insight['follow_up_query'])
+                        st.rerun()
+
+            elif response_type == "suggestions":
+                st.warning("💡 Your query is a bit vague. Please choose a more specific option below:")
+                for i, suggestion in enumerate(response['suggestions']):
+                    if st.button(suggestion['query'], key=f"suggestion_{event['query']}_{i}"):
+                        with st.spinner('Thinking...'):
+                            process_query(suggestion['query'])
+                        st.rerun()
+                    st.markdown(f"> {suggestion['explanation']}")
+            
+            elif response_type == "error":
+                st.error(response.get("explanation", "An unknown error occurred."))
 
 st.title("🤖 Finkraft Data Explorer")
 st.markdown("Upload your CSV and ask questions in plain English!")
@@ -78,71 +128,79 @@ with st.sidebar:
             try:
                 response = requests.post(f"{BACKEND_URL}/upload", files=files)
                 if response.status_code == 200:
-                    uploaded_file.seek(0)
-                    st.session_state.full_df = pd.read_csv(uploaded_file)
-                    st.session_state.display_df = st.session_state.full_df
-                    st.session_state.data_id = response.json()['data_id']
-                    st.session_state.explanation = "File uploaded successfully! The full dataset is shown below."
+                    response_data = response.json()
+                    st.session_state.data_id = response_data['data_id']
+                    st.session_state.profile = response_data['profile']
+                    st.session_state.chat_history = [] # Reset history on new upload
                     st.success('File Uploaded!')
+                    st.rerun()
                 else:
                     st.error(f"Error: {response.text}")
             except Exception as e:
                 st.error(f"An error occurred: {e}")
 
-# --- Main Area for Data and Charts ---
+    if st.session_state.data_id:
+        st.header("Export")
+        st.download_button(
+            label="Export Chat as JSON",
+            data=json.dumps(st.session_state.chat_history, indent=2),
+            file_name="chat_history.json",
+            mime="application/json",
+        )
+        st.markdown(f'<a href="{BACKEND_URL}/export/{st.session_state.data_id}/csv" download>Export Final Data as CSV</a>', unsafe_allow_html=True)
+        
+        if st.button("Preview Summary"):
+            with st.spinner("Generating Summary..."):
+                response = requests.get(f"{BACKEND_URL}/export/{st.session_state.data_id}/md")
+                if response.status_code == 200:
+                    st.session_state.markdown_preview = response.text
+                else:
+                    st.error("Could not generate summary.")
+
+        st.markdown(f'<a href="{BACKEND_URL}/export/{st.session_state.data_id}/md" download>Export Summary as Markdown</a>', unsafe_allow_html=True)
+
+
+# --- Main Chat Interface ---
 if st.session_state.data_id is None:
     st.info("Please upload a CSV file to begin.")
 else:
-    query = st.text_input("Enter your query:", placeholder="e.g., 'What are the total sales per region?'")
+    # Display Data Profile
+    if st.session_state.profile:
+        with st.expander("📊 Data Profile & Quality Check"):
+            st.subheader("Dataset Summary")
+            summary = st.session_state.profile['dataset_summary']
+            cols = st.columns(4)
+            i = 0
+            for key, value in summary.items():
+                cols[i].metric(label=key, value=value)
+                i += 1
 
-    if st.button("Ask", type="primary") and query:
-        with st.spinner('Thinking...'):
-            process_query(query)
+            st.subheader("Column Details")
+            column_details_df = pd.DataFrame(st.session_state.profile['column_details'])
+            st.dataframe(column_details_df, use_container_width=True)
 
-    # Display explanation in main area
-    if st.session_state.explanation:
-        st.info(st.session_state.explanation)
+            st.subheader("Numeric Column Statistics")
+            numeric_summary_dict = st.session_state.profile['numeric_summary']
+            if numeric_summary_dict:
+                numeric_summary_df = pd.DataFrame(numeric_summary_dict).reset_index()
+                numeric_summary_df = numeric_summary_df.rename(columns={'index': 'Statistic'})
+                st.dataframe(numeric_summary_df, use_container_width=True)
+            else:
+                st.write("No numeric columns found in the dataset.")
 
-    # Display suggestions with context
-    if st.session_state.suggestions:
-        st.warning("💡 Your query is a bit vague. Please choose a more specific option below:")
-        for i, suggestion in enumerate(st.session_state.suggestions):
-            with st.container():
-                if st.button(suggestion['query'], key=f"suggestion_{i}"):
-                    with st.spinner('Thinking...'):
-                        process_query(suggestion['query'])
-                    st.rerun()
-                st.markdown(f"> {suggestion['explanation']}")
-        st.divider()
+    # Render the chat history
+    render_chat()
 
-    # Display chart if spec exists
-    if st.session_state.chart_spec:
-        st.subheader("Chart")
-        spec = st.session_state.chart_spec
-        chart_df = st.session_state.display_df
-        
-        try:
-            if spec['type'] == 'bar':
-                fig = px.bar(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
-                st.plotly_chart(fig, use_container_width=True)
-            elif spec['type'] == 'pie':
-                fig = px.pie(chart_df, names=spec['names_column'], values=spec['values_column'], color_discrete_sequence=px.colors.sequential.RdBu)
-                st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.error(f"Could not create chart: {e}")
-        st.divider()
+    # Chat input
+    if prompt := st.chat_input("What would you like to ask?"):
+        process_query(prompt)
+        st.rerun()
 
-    st.subheader("Data View")
-    st.dataframe(st.session_state.display_df)
-
-    @st.cache_data
-    def convert_df_to_csv(df):
-        return df.to_csv(index=False).encode('utf-8')
-
-    csv = convert_df_to_csv(st.session_state.display_df)
-    st.download_button(
-        label="Download Current View as CSV",
-        data=csv,
-        file_name='current_view.csv',
-        mime='text/csv',
-    )
+    # Markdown Preview Modal
+    if st.session_state.markdown_preview:
+        with st.container():
+            st.markdown("## Chat Summary Preview")
+            st.markdown(st.session_state.markdown_preview, unsafe_allow_html=True)
+            if st.button("Close Preview"):
+                st.session_state.markdown_preview = None
+                st.rerun()

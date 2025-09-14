@@ -75,14 +75,14 @@ This agentic architecture allows the system to break down complex problems, hand
 ## 6. Setup and Running the Application
 
 #### Prerequisites
-*   Python 3.8+
+*   Python 3.11+
 *   pip
 
 #### Installation
 
 ```bash
 # 1. Clone the repository
-# git clone <your-repo-url>
+git clone https://github.com/AdityaPandey4/Finkraft_AI.git
 
 # 2. Navigate to the project directory
 cd Finkraft

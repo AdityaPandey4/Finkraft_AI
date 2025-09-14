@@ -8,8 +8,8 @@ This document provides a detailed overview of the features and technical impleme
 
 The application follows a decoupled frontend-backend architecture:
 
--   **Frontend:** A [Streamlit](https://streamlit.io/) application (`frontend/app.py`) that provides the user interface. It is responsible for all UI rendering, user interaction, and communication with the backend.
--   **Backend:** A [FastAPI](https://fastapi.tiangolo.com/) server (`backend/llm_version/main.py`) that exposes a REST API. It handles all the heavy lifting, including data storage, query processing, and all interactions with the Large Language Model (LLM).
+-   **Frontend:** A [Streamlit] application (`frontend/app.py`) that provides the user interface. It is responsible for all UI rendering, user interaction, and communication with the backend.
+-   **Backend:** A [FastAPI] server (`backend/llm_version/main.py`) that exposes a REST API. It handles all the heavy lifting, including data storage, query processing, and all interactions with the Large Language Model (LLM).
 
 ---
 

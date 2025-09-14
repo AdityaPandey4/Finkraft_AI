@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+streamlit
+pandas
+python-dotenv
+google-generativeai
+requests
+plotly
+reportlab
+python-multipart
+kaleido

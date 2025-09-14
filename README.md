@@ -6,10 +6,16 @@ The Finkraft Data Explorer is a Streamlit web application that empowers non-tech
 
 This project evolved from a simple Large Language Model (LLM) implementation into a robust, stateful AI agent built with **LangGraph**, showcasing a powerful paradigm for creating intelligent, conversational applications.
 
+## In-Depth Walkthrough Video 📹
+* Kindly watch this video to completly understand the project, I have provided an in-depth walkthrough of the code, architecture, components etc.
+* Link : https://drive.google.com/file/d/1utixqoX_tvwLxlc1PE26VILNli4ARhgx/view?usp=sharing
+
 ---
 ## Live Demo 🚀
 
 ![Live_demo_GIF](./demo_gif/Data_explorer_.gif)
+
+
 
 ## 2. Features 🎯
 

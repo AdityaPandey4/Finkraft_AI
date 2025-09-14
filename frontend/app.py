@@ -3,6 +3,8 @@ import pandas as pd
 import requests
 import plotly.express as px
 import json
+import subprocess
+import os
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -24,6 +26,8 @@ def init_session_state():
         st.session_state.profile = None
     if 'markdown_preview' not in st.session_state:
         st.session_state.markdown_preview = None
+    if 'server_process' not in st.session_state:
+        st.session_state.server_process = None
 
 init_session_state()
 
@@ -60,66 +64,105 @@ def render_chat():
             st.markdown(event['query'])
 
         with st.chat_message("assistant"):
-            response = event['response']
-            response_type = response.get("type")
+            try:
+                response = event['response']
+                if not isinstance(response, dict):
+                    st.error("Invalid response from backend.")
+                    continue
 
-            if response_type == "code":
-                st.info(response.get("explanation", ""))
+                response_type = response.get("classification") or response.get("type")
+
+                if response_type == "code_generation" or response_type == "code":
+                    st.info(response.get("explanation", ""))
+                    
+                    # Display charts in tabs
+                    if response.get("charts"):
+                        st.subheader("Charts")
+                        chart_tabs = st.tabs([spec['type'].capitalize() for spec in response["charts"]])
+                        for i, spec in enumerate(response["charts"]):
+                            with chart_tabs[i]:
+                                chart_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
+                                try:
+                                    if spec['type'] == 'bar':
+                                        fig = px.bar(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                    elif spec['type'] == 'pie':
+                                        fig = px.pie(chart_df, names=spec['names_column'], values=spec['values_column'], color_discrete_sequence=px.colors.sequential.RdBu)
+                                    elif spec['type'] == 'line':
+                                        fig = px.line(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                    elif spec['type'] == 'scatter':
+                                        fig = px.scatter(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Could not create {spec['type']} chart: {e}")
+                        st.divider()
+
+                    # Display dataframe
+                    st.subheader("Data View")
+                    display_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
+                    st.dataframe(display_df)
+
+                    # Display insight
+                    if response.get("insight"):
+                        st.markdown("--- ")
+                        insight = response["insight"]
+                        st.info(f"💡 **Proactive Insight:** {insight['insight']}")
+                        if st.button(insight['follow_up_query'], key=f"insight_{event['query']}"):
+                            with st.spinner('Discovering more insights...'):
+                                process_query(insight['follow_up_query'])
+                            st.rerun()
+
+                elif response_type == "suggestion" or response_type == "suggestions":
+                    st.warning("💡 Your query is a bit vague. Please choose a more specific option below:")
+                    for i, suggestion in enumerate(response['suggestions']):
+                        if st.button(suggestion['query'], key=f"suggestion_{event['query']}_{i}"):
+                            with st.spinner('Thinking...'):
+                                process_query(suggestion['query'])
+                            st.rerun()
+                        st.markdown(f"> {suggestion['explanation']}")
                 
-                # Display charts in tabs
-                if response.get("charts"):
-                    st.subheader("Charts")
-                    chart_tabs = st.tabs([spec['type'].capitalize() for spec in response["charts"]])
-                    for i, spec in enumerate(response["charts"]):
-                        with chart_tabs[i]:
-                            chart_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
-                            try:
-                                if spec['type'] == 'bar':
-                                    fig = px.bar(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
-                                elif spec['type'] == 'pie':
-                                    fig = px.pie(chart_df, names=spec['names_column'], values=spec['values_column'], color_discrete_sequence=px.colors.sequential.RdBu)
-                                elif spec['type'] == 'line':
-                                    fig = px.line(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
-                                elif spec['type'] == 'scatter':
-                                    fig = px.scatter(chart_df, x=spec['x_column'], y=spec['y_column'], color=spec.get('color_column'))
-                                st.plotly_chart(fig, use_container_width=True)
-                            except Exception as e:
-                                st.error(f"Could not create {spec['type']} chart: {e}")
-                    st.divider()
-
-                # Display dataframe
-                st.subheader("Data View")
-                display_df = pd.DataFrame(response['dataframe'], columns=response['columns'])
-                st.dataframe(display_df)
-
-                # Display insight
-                if response.get("insight"):
-                    st.markdown("--- ")
-                    insight = response["insight"]
-                    st.info(f"💡 **Proactive Insight:** {insight['insight']}")
-                    if st.button(insight['follow_up_query'], key=f"insight_{event['query']}"):
-                        with st.spinner('Discovering more insights...'):
-                            process_query(insight['follow_up_query'])
-                        st.rerun()
-
-            elif response_type == "suggestions":
-                st.warning("💡 Your query is a bit vague. Please choose a more specific option below:")
-                for i, suggestion in enumerate(response['suggestions']):
-                    if st.button(suggestion['query'], key=f"suggestion_{event['query']}_{i}"):
-                        with st.spinner('Thinking...'):
-                            process_query(suggestion['query'])
-                        st.rerun()
-                    st.markdown(f"> {suggestion['explanation']}")
-            
-            elif response_type == "error":
-                st.error(response.get("explanation", "An unknown error occurred."))
+                elif response_type == "error":
+                    st.error(response.get("explanation", "An unknown error occurred."))
+            except Exception as e:
+                st.error(f"An error occurred while rendering the response: {e}")
 
 st.title("🤖 Finkraft Data Explorer")
 st.markdown("Upload your CSV and ask questions in plain English!")
 
+# --- Server Control ---
+def start_server(version):
+    if st.session_state.server_process:
+        st.session_state.server_process.kill()
+    
+    if version == "LLM Version":
+        command = ["uvicorn", "backend.llm_version.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"]
+    else:
+        command = ["uvicorn", "backend.LangGraph_version.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"]
+    
+    st.session_state.server_process = subprocess.Popen(command)
+    st.success(f"Started {version} server.")
+
+def stop_server():
+    if st.session_state.server_process:
+        st.session_state.server_process.kill()
+        st.session_state.server_process = None
+        st.success("Server stopped.")
+
 # --- Sidebar for Controls ---
 with st.sidebar:
     st.header("Controls")
+
+    # Version selection
+    version = st.selectbox(
+        "Choose the application version",
+        ("LLM Version", "LangGraph Version")
+    )
+
+    if st.button("Start Server"):
+        start_server(version)
+
+    if st.button("Stop Server"):
+        stop_server()
+
     uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
     
     if uploaded_file is not None and st.session_state.data_id is None:

@@ -1,14 +1,17 @@
 # Finkraft Data Explorer: An AI-Powered Conversational Agent
 
-## 1. Overview
+## 1. Overview 🥇
 
 The Finkraft Data Explorer is a Streamlit web application that empowers non-technical users to upload CSV data and conduct complex data analysis using simple, natural language. At its core is a sophisticated AI agent that interprets user queries, generates and executes Python (pandas) code, creates interactive visualizations, and provides proactive insights, transforming the way users interact with their data.
 
 This project evolved from a simple Large Language Model (LLM) implementation into a robust, stateful AI agent built with **LangGraph**, showcasing a powerful paradigm for creating intelligent, conversational applications.
 
 ---
+## Live Demo 🚀
 
-## 2. Features
+![Live_demo_GIF](./demo_gif/Data_explorer_.gif)
+
+## 2. Features 🎯
 
 *   **CSV Upload & Automated Profiling:** Instantly upload a CSV and get a comprehensive data profile, including column types, missing values, and statistical summaries.
 *   **Natural Language Querying:** Ask questions about your data in plain English (e.g., "*What was the total revenue last quarter?*" or "*Show me the top 5 products by units sold in the North region*").
@@ -19,7 +22,7 @@ This project evolved from a simple Large Language Model (LLM) implementation int
 
 ---
 
-## 3. The Architectural Evolution
+## 3. The Architectural Evolution ✨
 
 This project was developed in two distinct phases, highlighting a critical shift in architectural thinking.
 
@@ -44,7 +47,7 @@ This agentic architecture allows the system to break down complex problems, hand
 
 ---
 
-## 4. Technology Stack
+## 4. Technology Stack ⏱️
 
 *   **Backend:** Python, FastAPI, LangChain, LangGraph, Google Gemini Pro, Pandas
 *   **Frontend:** Streamlit, Plotly
@@ -132,3 +135,5 @@ The move to an agentic framework was driven by the need to solve several core pr
 *   **Challenge: Unhelpful Suggestions**
     *   **Problem:** For vague queries, the agent would provide overly technical (e.g., SQL) or irrelevant suggestions.
     *   **Solution:** We enhanced the `suggestion` node by providing it with the full schema of the user's data and explicitly instructing it to generate user-friendly, natural language queries. This turned a weak feature into a powerful guidance mechanism.
+
+    **Created By - Aditya Pandey(AdityaPandey4)** 💯 ✨ 

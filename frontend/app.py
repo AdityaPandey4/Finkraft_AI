@@ -8,7 +8,7 @@ import os
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="Finkraft Data Explorer",
+    page_title="Data Explorer",
     page_icon="🤖",
     layout="wide"
 )
@@ -125,7 +125,7 @@ def render_chat():
             except Exception as e:
                 st.error(f"An error occurred while rendering the response: {e}")
 
-st.title("🤖 Finkraft Data Explorer")
+st.title("🤖 Data Explorer")
 st.markdown("Upload your CSV and ask questions in plain English!")
 
 # --- Server Control ---

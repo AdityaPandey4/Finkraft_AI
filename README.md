@@ -50,6 +50,11 @@ This agentic architecture allows the system to break down complex problems, hand
 *   **Frontend:** Streamlit, Plotly
 *   **API Server:** Uvicorn
 
+##  Project Architecture
+* **LLM Architecture**
+ ![LLM_Architecture](./backend/architecture/LLM_Data_explorer.png)
+* **LangGraph AI Agent Workflow Architecture**
+ ![LangGraph_Architecture](./backend/architecture/LangGraph_DataExplorer.png)
 ---
 
 ## 5. How It Works: Agent Data Flow

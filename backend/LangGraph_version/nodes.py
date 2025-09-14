@@ -13,27 +13,28 @@ llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
 logger = logging.getLogger(__name__)
 
 def classify_query(state):
-    """Classifies the user's query.
-
-    Args:
-        state (AgentState): The current state of the agent.
-
-    Returns:
-        AgentState: The updated state of the agent.
-    """
+    """Classifies the user's query."""
     query = state["query"]
-    chat_history = state["chat_history"][-2:]
+    
+    # Create a simplified history for the prompt
+    history = state["chat_history"][-2:]
+    simplified_history = []
+    for event in history:
+        simplified_history.append(f"User: {event['query']}")
+        if event.get('response', {}).get('explanation'):
+            simplified_history.append(f"Assistant: {event['response']['explanation']}")
+    history_str = "\n".join(simplified_history)
 
     prompt = f"""You are a master at understanding user queries.
     Your task is to classify the user's query into one of the following categories:
-    - "code_generation": The user is asking to perform some operation on the data (If the query is clear and actionable with all the required metrics to perform that task).
-    - "suggestion": The user's query is vague or ambiguous (e.g., "top products" without specifying a metric).
-    - "greeting": The user is just greeting.
+    - \"code_generation\": The user is asking to perform some operation on the data (If the query is clear and actionable with all the required metrics to perform that task).
+    - \"suggestion\": The user's query is vague or ambiguous (e.g., \"top products\" without specifying a metric).
+    - \"greeting\": The user is just greeting.
 
-    Here is the user's query: "{query}" 
+    Here is the summary of the previous conversation:
+    {history_str}
 
-    Here is the chat history:
-    {chat_history}
+    Now, classify the user's current query: \"{query}\" 
 
     Please respond with one of the following categories:
     - code_generation
@@ -47,30 +48,32 @@ def classify_query(state):
     return state
 
 def code_generation(state):
-    """Generates pandas code to transform the dataframe.
-
-    Args:
-        state (AgentState): The current state of the agent.
-
-    Returns:
-        AgentState: The updated state of the agent.
-    """
+    """Generates pandas code to transform the dataframe."""
     query = state["query"]
     df = state["dataframe"]
     profile = get_profile_as_dict(df)
-    chat_history = state["chat_history"][-2:]
+    
+    # Create a simplified history for the prompt
+    history = state["chat_history"][-2:]
+    simplified_history = []
+    for event in history:
+        simplified_history.append(f"User: {event['query']}")
+        if event.get('response', {}).get('explanation'):
+            simplified_history.append(f"Assistant: {event['response']['explanation']}")
+    history_str = "\n".join(simplified_history)
 
     prompt = f"""You are a Python pandas expert and a helpful data analyst.
     A user has provided a dataframe named 'df' and a query in natural language.
     Here is the data profile of the dataframe:
     {profile}
 
-    User query: "{query}" 
+    Here is the summary of the previous conversation:
+    {history_str}
 
-    Chat History:
-    {chat_history}
+    Now, address the user's current query: \"{query}\" 
 
-    Your task is to generate pandas code to transform the dataframe.
+    Your task is to generate pandas code to transform the dataframe based on the current query.
+    Consider the conversation history for context if the user is asking a follow-up question.
     The final result MUST be assigned to a variable named 'result_df'.
     After the main transformation, analyze the 'result_df' and generate a list of all suitable chart specifications in a 'charts' array.
     Provide a detailed but easy-to-understand explanation for a non-technical user.
@@ -130,14 +133,7 @@ def code_generation(state):
     return state
 
 def code_execution(state):
-    """Executes the generated code.
-
-    Args:
-        state (AgentState): The current state of the agent.
-
-    Returns:
-        AgentState: The updated state of the agent.
-    """
+    """Executes the generated code."""
     if state.get("error"):
         return state
         
@@ -158,14 +154,7 @@ def code_execution(state):
     return state
 
 def suggestion(state):
-    """Generates suggestions for ambiguous queries.
-
-    Args:
-        state (AgentState): The current state of the agent.
-
-    Returns:
-        AgentState: The updated state of the agent.
-    """
+    """Generates suggestions for ambiguous queries."""
     query = state["query"]
     df = state["dataframe"]
     profile = get_profile_as_dict(df)
@@ -179,13 +168,13 @@ def suggestion(state):
     Here is the data profile of the dataframe:
     {profile}
 
-    User's ambiguous query: "{query}"
+    User's ambiguous query: \"{query}\" 
 
     Here is the conversation history so far:
     {chat_history}
 
     **IMPORTANT**: The 'query' field in your response MUST be a question in plain English that the user could ask next. Do NOT generate SQL or Python code.
-
+    **Generate suggestions after looking at the data, and only provide those suggestions which can be calculated with our available data.**
     **Example of an ambiguous query response (JSON):**
     {{
         "type": "suggestions",
@@ -215,14 +204,7 @@ def suggestion(state):
 
 
 def insight_generation(state):
-    """Generates a proactive insight based on the result.
-
-    Args:
-        state (AgentState): The current state of the agent.
-
-    Returns:
-        AgentState: The updated state of the agent.
-    """
+    """Generates a proactive insight based on the result."""
     if state.get("error"):
         return state
         
@@ -231,7 +213,7 @@ def insight_generation(state):
     result_head = result_df.head().to_string()
 
     prompt = f"""You are a proactive data analyst. A user has just run a query and obtained a result.
-    Original user query: "{query}" 
+    Original user query: \"{query}\" 
     
     The first 5 rows of the result dataframe ('result_df') are:
     {result_head}

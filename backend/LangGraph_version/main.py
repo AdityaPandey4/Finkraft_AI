@@ -94,8 +94,8 @@ def process_query(request: QueryRequest):
         if "dataframe" in response and isinstance(response["dataframe"], pd.DataFrame):
             new_df = response["dataframe"]
             if response_type == "code_generation":
-                logger.info("Updating dataframe in cache.")
-                update_dataframe(request.data_id, new_df)
+                logger.info("Not updating dataframe in cache to preserve original data for follow-up questions.")
+                # update_dataframe(request.data_id, new_df) # This is commented out to prevent overwriting the original dataframe
             
             response["dataframe"] = new_df.to_dict(orient='records')
             response["columns"] = new_df.columns.tolist()

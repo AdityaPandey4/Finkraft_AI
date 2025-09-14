@@ -1,4 +1,3 @@
-Here are some suggested features, focusing on ease of use and practical business needs:
 
   1. Automated Data Profiling and Quality Check
    * What it is: When a user uploads a CSV, the application would automatically generate a quick

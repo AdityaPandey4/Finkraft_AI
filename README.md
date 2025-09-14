@@ -52,7 +52,7 @@ This agentic architecture allows the system to break down complex problems, hand
 
 ##  Project Architecture
 * **LLM Architecture**
- ![LLM_Architecture](./backend/architecture/LLM_Data_explorer.png)
+ ![LLM_Architecture](./backend/architecture/LLM_DataExplorer.png)
 * **LangGraph AI Agent Workflow Architecture**
  ![LangGraph_Architecture](./backend/architecture/LangGraph_DataExplorer.png)
 ---

@@ -1,8 +1,8 @@
-# Finkraft Data Explorer: An AI-Powered Conversational Agent
+# LangGraph Data Explorer: An AI-Powered Conversational Agent
 
 ## 1. Overview 🥇
 
-The Finkraft Data Explorer is a Streamlit web application that empowers non-technical users to upload CSV data and conduct complex data analysis using simple, natural language. At its core is a sophisticated AI agent that interprets user queries, generates and executes Python (pandas) code, creates interactive visualizations, and provides proactive insights, transforming the way users interact with their data.
+The LangGraph Data Explorer is a Streamlit web application that empowers non-technical users to upload CSV data and conduct complex data analysis using simple, natural language. At its core is a sophisticated AI agent that interprets user queries, generates and executes Python (pandas) code, creates interactive visualizations, and provides proactive insights, transforming the way users interact with their data.
 
 This project evolved from a simple Large Language Model (LLM) implementation into a robust, stateful AI agent built with **LangGraph**, showcasing a powerful paradigm for creating intelligent, conversational applications.
 
